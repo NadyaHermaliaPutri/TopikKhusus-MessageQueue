@@ -1,9 +1,7 @@
 # Message Queue
 
 Nadya Hermalia Putri
-
 2311082034
-
 TRPL 3D
 
 ## Pengantar
@@ -95,6 +93,3 @@ Untuk versi Node.js:
 cd MessageQueueNew
 npm test
 ```
-
-## Kontribusi
-Proyek ini dikembangkan oleh Nadya Hermalia Putri sebagai bagian dari pembelajaran arsitektur perangkat lunak dan sistem terdistribusi. Fokus utama adalah pada pemisahan tanggung jawab dan skalabilitas.
