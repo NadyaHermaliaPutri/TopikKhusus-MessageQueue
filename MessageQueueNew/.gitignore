@@ -1,0 +1,16 @@
+node_modules/
+npm-debug.log*
+.yarn-integrity
+.pnp.*
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.idea/
+.vscode/
+.DS_Store
+*.log
