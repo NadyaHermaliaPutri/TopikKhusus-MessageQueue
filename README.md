@@ -1,10 +1,10 @@
 # Message Queue
 
 Nadya Hermalia Putri
-2311082034
-TRPL 3D
 
-# Message Queue Nadya Hermalia Putri
+2311082034
+
+TRPL 3D
 
 ## Pengantar
 Repositori ini menyediakan contoh implementasi sistem message queue menggunakan RabbitMQ untuk pola pub/sub. Kami menyediakan implementasi dalam beberapa bahasa pemrograman untuk memudahkan pembelajaran dan perbandingan.
