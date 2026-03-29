@@ -1,10 +1,10 @@
 # Message Queue
 
 Nadya Hermalia Putri
-2311082034
-TRPL 3D
 
-# Message Queue Nadya Hermalia Putri
+2311082034
+
+TRPL 3D
 
 ## Pengantar
 Repositori ini menyediakan contoh implementasi sistem message queue menggunakan RabbitMQ untuk pola pub/sub. Kami menyediakan implementasi dalam beberapa bahasa pemrograman untuk memudahkan pembelajaran dan perbandingan.
@@ -95,6 +95,3 @@ Untuk versi Node.js:
 cd MessageQueueNew
 npm test
 ```
-
-## Kontribusi
-Proyek ini dikembangkan oleh Nadya Hermalia Putri sebagai bagian dari pembelajaran arsitektur perangkat lunak dan sistem terdistribusi. Fokus utama adalah pada pemisahan tanggung jawab dan skalabilitas.
