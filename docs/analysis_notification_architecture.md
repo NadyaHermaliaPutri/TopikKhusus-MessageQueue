@@ -1,86 +1,72 @@
-# Analisis Arsitektur dan Kode
+# Analisis Arsitektur Sistem Message Queue
 
-## 1. Ringkasan proyek
-Proyek ini adalah implementasi contoh pattern pub/sub menggunakan RabbitMQ dengan dua implementasi:
+## Pendahuluan
+Dokumen ini menganalisis arsitektur proyek MessageQueue, yang mengimplementasikan pola publish-subscribe menggunakan RabbitMQ. Fokus utama adalah pada desain sistem, alur kerja, dan praktik terbaik yang diterapkan.
 
-- message_queue_cloning/notification_publisher: Publisher HTTP Go + RabbitMQ
-- message_queue_cloning/notification_consumer: Konsumer Go (EMAIL, SMS, FCM)
+## Ringkasan Proyek
+Proyek ini terdiri dari dua implementasi utama:
+- **MessageQueueCloning**: Versi asli dalam bahasa Go, dengan publisher HTTP dan konsumer untuk notifikasi email, SMS, dan FCM.
+- **MessageQueueNew**: Reimplementasi dalam Node.js, dengan struktur yang lebih modular dan fokus pada skalabilitas.
 
-Kedua modul menggunakan exchange fanout untuk mendistribusikan payload pesan ke semua antrean terkait.
+Kedua versi menggunakan exchange fanout RabbitMQ untuk distribusi pesan ke multiple konsumer.
 
-## 2. Struktur high-level
-### notification_publisher
-- main.go: entrypoint. load config, koneksi RabbitMQ, inject dependensi, register endpoint POST /publish.
-- config/config.go: config struct (PORT, RABBITMQ_URL, EXCHANGE_NAME) via envconfig.
-- pkg/rabbitmq/connection.go: koneksi AMQP standar dengan amqp.Dial.
-- internal/repository/rabbitmq_repo.go: deklarasi exchange + publish JSON ke exchange dengan PublishWithContext.
-- internal/usecase/message_usecase.go: lapisan domain yang memanggil repository.
-- internal/handler/handler.go: HTTP binding request body ke entity.Message, validasi, respond JSON.
-- internal/entity/entity.go: model message.
+## Arsitektur Tingkat Tinggi
+### Komponen Utama
+- **Publisher**: Endpoint HTTP yang menerima payload JSON dan mempublikasikan ke RabbitMQ exchange.
+- **Exchange Fanout**: Komponen RabbitMQ yang menduplikasi pesan ke semua queue terikat.
+- **Queues**: Antrean khusus untuk setiap jenis notifikasi (email, SMS, FCM).
+- **Consumers**: Proses yang mengkonsumsi pesan dari queue dan mengeksekusi aksi notifikasi.
 
-### notification_consumer
-- cmd/email/main.go, cmd/sms/main.go, cmd/fcm/main.go: masing-masing service khusus membaca config, koneksi RMQ, instantiate repo/usecase, panggil metode konsumsi, select {} lockmain.
-- config/config.go: sama (PORT optional, RABBITMQ_URL, EXCHANGE_NAME) via envconfig.
-- pkg/rabbitmq/connection.go: koneksi amqp.
-- internal/repository/rabbitmq_repo.go: deklarasi exchange fanout, queue declare (berbasis serviceName), bind queue ke exchange, consume.
-  Konsumsi non-auto-ack (false), manual msg.Ack(false) saat sukses.
-  Loop goroutine untuk pesan; unmarshal JSON, log, kirim ke pkg/notification handler.
-- internal/usecase/message_usecase.go: lapisan usecase memanggil repos.
-- internal/entity/entity.go: model message identik.
-- pkg/notification/{email,sms,fcm}.go: stub fungsi output fmt.Println.
+### Struktur Kode
+- **Go Version**:
+  - `notification_publisher`: Handler HTTP dengan Echo framework.
+  - `notification_consumer`: Konsumer terpisah per jenis, menggunakan goroutine untuk pemrosesan async.
+- **Node.js Version**:
+  - `publisher`: API Express dengan middleware validasi.
+  - `consumer`: Konsumer dengan event loop async menggunakan amqplib.
 
-## 3. Alur eksekusi
-### 3.1 Publisher
-- Start dengan go run main.go.
-- LoadConfig baca env: PORT default 8080, RABBITMQ_URL default amqp://guest:guest@localhost:5672/, EXCHANGE_NAME default notifications.
-- Buat koneksi RabbitMQ.
-- Endpoint POST /publish -> MessageHandler.PublishMessage:
-  - bind JSON ke Message
-  - usecase PublishMessage(ctx, "notifications", message)
-  - repository PublishMessage -> ExchangeDeclare(fanout) dan PublishWithContext
-  - Kembali JSON success/failed.
+## Alur Kerja Sistem
+1. **Publikasi Pesan**:
+   - Client mengirim POST request ke `/publish` dengan data JSON.
+   - Publisher memvalidasi payload dan publish ke exchange fanout.
+2. **Distribusi Pesan**:
+   - Exchange fanout mengirim salinan pesan ke setiap queue yang terikat.
+3. **Konsumsi Pesan**:
+   - Konsumer masing-masing mendengarkan queue-nya.
+   - Pesan diproses, di-ack secara manual untuk memastikan reliability.
+4. **Pemrosesan Notifikasi**:
+   - Berdasarkan jenis konsumer, pesan dikirim sebagai email, SMS, atau FCM.
 
-### 3.2 Consumer (EMAIL/SMS/FCM)
-- Start service masing-masing dari folder cmd/{email,sms,fcm}.
-- Load config + RabbitMQ connection.
-- useCase.ConsumeMessagesX(context.Background(), serviceName) -> repository:
-  - ExchangeDeclare(fanout) (idempotent)
-  - QueueDeclare(serviceName, durable true, ... )
-  - QueueBind(queue, "", exchange,...)
-  - Consume(queue, serviceName, autoAck false, ... )
-  - Goroutine konsumsi:
-    - json.Unmarshal(msg.Body, &entity.Message)
-    - log message
-    - notification.SendX(message) -> print ke stdout
-    - msg.Ack(false)
+## Pola Desain yang Diterapkan
+- **Publish-Subscribe**: Decoupling antara publisher dan konsumer.
+- **Clean Architecture**: Pemisahan layer (handler, usecase, repository, infrastructure).
+- **Dependency Injection**: Konfigurasi dan koneksi di-inject secara manual.
+- **Asynchronous Processing**: Goroutine di Go, async/await di Node.js.
+- **Manual Acknowledgment**: Memastikan pesan tidak hilang jika konsumer gagal.
 
-## 4. Pola arsitektur
-- Clean architecture (layered): config -> infrastructure (RabbitMQ) -> repository -> usecase -> handler.
-- Dependency injection secara manual di main.go.
-- Exchange fanout + queue dedicated setiap kanal konsumer.
-- Non-blocking pesanan (goroutine consumer async) dan ack manual -> safe ketika error.
-
-## 5. Kelebihan dan perbaikan potensial
+## Kelebihan dan Kekurangan
 ### Kelebihan
-- Mudah diikuti (clear separation concern)
-- Sederhana untuk edukasi
-- Konsumen bisa scale dengan menjalankan multiple instance/queue
+- **Skalabilitas**: Mudah menambah konsumer baru tanpa mengubah publisher.
+- **Reliability**: Pesan disimpan di queue sampai di-ack.
+- **Decoupling**: Komponen independen, memudahkan testing dan maintenance.
+- **Multi-Language**: Implementasi di Go dan Node.js memungkinkan perbandingan.
 
-### Perbaikan
-- Tambah retry/dlq bila gagal unmarshal atau pemrosesan.
-- Konfigurasi queue/exchange hard-coded fanout vs env.
-- Kirim serviceName dynamic via env SERVICE_NAME (baris dikomentari di sms/fcm/email) agar lebih fleksibel.
-- Tambah test unit/integration untuk usecase/repository.
-- Kelola graceful shutdown dan context cancel ketika service stop.
+### Kekurangan
+- **Kompleksitas Setup**: Membutuhkan RabbitMQ server yang berjalan.
+- **Overhead Network**: Pesan dikirim ke semua konsumer, meskipun tidak semua butuh.
+- **Manual Management**: Ack dan nack perlu dikelola dengan hati-hati.
+- **Resource Usage**: Multiple konsumer berjalan secara paralel.
 
-## 6. Diagram singkat
+## Diagram Arsitektur
 ```
-[HTTP Client] -> /publish -> [Publisher (Go)] -> RabbitMQ exchange "notifications" (fanout)
-                                                         /            |           \
-                                                        /             |            \
-                                                       v              v             v
-                                             [Email queue EMAIL] [SMS queue SMS] [FCM queue FCM]
-                                                       |             |             |
-                                                       v             v             v
-                                                 [Email consumer] [SMS consumer] [FCM consumer]
+[Client HTTP] --> [Publisher API] --> RabbitMQ Exchange (Fanout)
+                                      |
+                                      +--> Queue Email --> Consumer Email
+                                      |
+                                      +--> Queue SMS --> Consumer SMS
+                                      |
+                                      +--> Queue FCM --> Consumer FCM
 ```
+
+## Kesimpulan
+Arsitektur ini efektif untuk sistem notifikasi terdistribusi dengan fokus pada decoupling dan skalabilitas. Implementasi di dua bahasa memberikan wawasan tentang trade-offs antara performa (Go) dan ekosistem (Node.js). Untuk pengembangan lebih lanjut, pertimbangkan routing yang lebih spesifik atau integrasi dengan database untuk persistence.
